@@ -19,6 +19,7 @@ public class MainActivity extends AppCompatActivity implements SeekBar.OnSeekBar
 
         seekBar.setOnSeekBarChangeListener(this);
         progressView.setDrawableResource(R.drawable.logo);
+        progressView.setProgress(seekBar.getProgress());
     }
 
     @Override

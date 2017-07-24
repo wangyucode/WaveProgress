@@ -7,8 +7,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.PointF;
 import android.graphics.Rect;
 import android.support.annotation.DrawableRes;
 import android.util.AttributeSet;
@@ -18,33 +16,34 @@ import android.view.SurfaceView;
 import static android.graphics.PixelFormat.TRANSLUCENT;
 
 /**
- * 二阶
- * Created by Deeson on 2017/5/24.
+ * 自定义形状波浪进度
+ * Created by wycode.cn on 2017/7/24.
  */
 public class ImageWaveProgress extends SurfaceView implements SurfaceHolder.Callback, Runnable {
 
-    //分别对应贝塞尔曲线、点、数据点和控制点之间的线、辅助线、辅助点
-    private Paint mPaint, mPointPaint, mLinePaint, mAssistLinePaint, mAssistPointPaint;
-    //绘制贝塞尔曲线的path
-    private Path mPath;
-    //布局的中心点
-    private int centerX, centerY;
-    //分别对应贝塞尔曲线的起点、终点、控制点、辅助线的起点、终点
-    private PointF start, end, control, process1, process2;
+    private Paint mPaint;
 
     private SurfaceHolder mHolder;
-    //用于绘图的canvas
-    private Canvas mCanvas;
     //子线程标志位
     private boolean mIsDrawing;
 
-    float x = 0;//贝塞尔曲线的实时点x坐标
-    float y = 0;//贝塞尔曲线的实时点y坐标
-    float t = 0;//实施进度，0<=t<=1
+    int w; //画布宽
+    int h; //画布高
+
 
     private Bitmap bitmap;
 
     private int progress;
+    private Rect rectCanvas;
+    private Rect rectBitmap;
+
+    private int tintColor = Color.GREEN;
+    private int untintColor = Color.WHITE;
+
+    int calculateSize = 100;
+    int waveLength = 16;
+    int waveHeightMax = 8;
+    int waveSpeed = 10;
 
     public ImageWaveProgress(Context context) {
         super(context);
@@ -63,37 +62,10 @@ public class ImageWaveProgress extends SurfaceView implements SurfaceHolder.Call
 
     private void init() {
         mPaint = new Paint();
-        mPath = new Path();
         mPaint.setColor(Color.RED);
         mPaint.setStrokeWidth(5);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setTextSize(60);
-
-        mPointPaint = new Paint();
-        mPointPaint.setColor(Color.BLACK);
-        mPointPaint.setStrokeWidth(10);
-        mPointPaint.setStyle(Paint.Style.STROKE);
-
-        mLinePaint = new Paint();
-        mLinePaint.setColor(Color.GRAY);
-        mLinePaint.setStrokeWidth(4);
-        mLinePaint.setStyle(Paint.Style.STROKE);
-
-        mAssistLinePaint = new Paint();
-        mAssistLinePaint.setColor(Color.GREEN);
-        mAssistLinePaint.setStrokeWidth(4);
-        mAssistLinePaint.setStyle(Paint.Style.STROKE);
-
-        mAssistPointPaint = new Paint();
-        mAssistPointPaint.setColor(Color.GREEN);
-        mAssistPointPaint.setStrokeWidth(10);
-        mAssistPointPaint.setStyle(Paint.Style.FILL);
-
-        start = new PointF(0, 0);
-        end = new PointF(0, 0);
-        control = new PointF(0, 0);
-        process1 = new PointF(0, 0);
-        process2 = new PointF(0, 0);
 
         mHolder = getHolder();
         setZOrderOnTop(true);
@@ -108,32 +80,25 @@ public class ImageWaveProgress extends SurfaceView implements SurfaceHolder.Call
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        centerX = w / 2;
-        centerY = h / 2;
-        //初始化数据点和控制点的位置
-        start.x = centerX - 200;
-        start.y = centerY;
-        end.x = centerX + 200;
-        end.y = centerY;
-        control.x = centerX - 50;
-        control.y = centerY - 300;
-        x = start.x;
-        y = start.y;
-        mPath.moveTo(x, y);
+        this.w = w;
+        this.h = h;
     }
 
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         mIsDrawing = true;
-        new Thread(this).start();
+        bitmap = setBitmapSize(bitmap, calculateSize * bitmap.getWidth() / bitmap.getHeight(), calculateSize);
+
+
     }
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        if(bitmap!=null){
-            bitmap = setBitmapSize(bitmap,width,height);
-        }
+        rectCanvas = new Rect(0, 0, width, height);
+        rectBitmap = new Rect(0, 0, bitmap.getWidth(), bitmap.getHeight());
+
+        new Thread(this).start();
     }
 
     @Override
@@ -146,75 +111,57 @@ public class ImageWaveProgress extends SurfaceView implements SurfaceHolder.Call
         while (mIsDrawing) {
             draw();
             processBitmap();
-            if (t <= 1) {
-                t += 0.003;
-
-                //辅助线坐标点
-                process1.x = (1 - t) * start.x + t * control.x;
-                process1.y = (1 - t) * start.y + t * control.y;
-                process2.x = (1 - t) * control.x + t * end.x;
-                process2.y = (1 - t) * control.y + t * end.y;
-
-                //贝塞尔曲线通用函数
-                x = (1 - t) * process1.x + t * process2.x;
-                y = (1 - t) * process1.y + t * process2.y;
-
-                //二阶贝塞尔曲线函数
-//                x = (float) (Math.pow((1 - t), 2) * start.x + 2 * t * (1 - t) * control.x + Math.pow(t, 2) * end.x);
-//                y = (float) (Math.pow((1 - t), 2) * start.y + 2 * t * (1 - t) * control.y + Math.pow(t, 2) * end.y);
-
-                mPath.lineTo(x, y);
-            } else {
-                mIsDrawing = false;
-            }
-
         }
     }
 
     private void processBitmap() {
-
+        for (int i = 0; i < bitmap.getWidth(); i++) {
+            for (int j = 0; j < bitmap.getHeight(); j++) {
+                int color = bitmap.getPixel(i, j);
+                if (color >>> 24 > 0) {
+                    int y = getWaveY(i);
+                    if (j > y) {
+                        bitmap.setPixel(i, j, tintColor);
+                    } else {
+                        bitmap.setPixel(i, j, untintColor);
+                    }
+                }
+            }
+        }
     }
 
+    private int getWaveY(int x) {
+        double sinX = Math.PI + (((((System.currentTimeMillis() / (1000 / waveSpeed)) + x) % waveLength)) / (double) waveLength * Math.PI);
+        int waveHeight = (int) (waveHeightMax * (Math.sin(sinX) + 1));
+        int y = (int) ((100 - progress) / 100f * bitmap.getHeight());
+        y -= waveHeight;
+        return y;
+    }
+
+
     private void draw() {
-        mCanvas = mHolder.lockCanvas();
-        mCanvas.drawBitmap(bitmap, new Rect(0,0,bitmap.getWidth(),bitmap.getHeight()),new Rect(0,0,mCanvas.getWidth(),mCanvas.getHeight()),mPaint);
-        //绘制数据点和控制点
-//        mCanvas.drawPoint(start.x, start.y, mPointPaint);
-//        mCanvas.drawPoint(control.x, control.y, mPointPaint);
-//        mCanvas.drawPoint(end.x, end.y, mPointPaint);
-//        //绘制数据点和控制点的连线
-//        mCanvas.drawLine(start.x, start.y, control.x, control.y, mLinePaint);
-//        mCanvas.drawLine(control.x, control.y, end.x, end.y, mLinePaint);
-//        //绘制辅助线和辅助点
-//        mCanvas.drawLine(process1.x, process1.y, process2.x, process2.y, mAssistLinePaint);
-//        mCanvas.drawPoint(process1.x, process1.y, mAssistPointPaint);
-//        mCanvas.drawPoint(process2.x, process2.y, mAssistPointPaint);
-//        //绘制二阶贝塞尔曲线的当前点
-//        mCanvas.drawPoint(x, y, mPointPaint);
-//        //绘制二阶贝塞尔曲线
-//        mCanvas.drawPath(mPath, mPaint);
-        mHolder.unlockCanvasAndPost(mCanvas);
+        Canvas canvas = mHolder.lockCanvas();
+        canvas.drawBitmap(bitmap, rectBitmap, rectCanvas, mPaint);
+        mHolder.unlockCanvasAndPost(canvas);
     }
 
     public void setDrawableResource(@DrawableRes int id) {
         bitmap = BitmapFactory.decodeResource(getResources(), id);
-//        Matrix m = new Matrix();
-//        m.setScale();
     }
-    public void setProgress(int progress){
+
+    public void setProgress(int progress) {
         this.progress = progress;
     }
 
     /**
      * 缩放图片
      *
-     * @param bitmap
-     *            原图片
+     * @param bitmap    原图片
      * @param newWidth
      * @param newHeight
      * @return
      */
-    public static Bitmap setBitmapSize(Bitmap bitmap, int newWidth, int newHeight) {
+    private Bitmap setBitmapSize(Bitmap bitmap, int newWidth, int newHeight) {
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
         float scaleWidth = (newWidth * 1.0f) / width;
