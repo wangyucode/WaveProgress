@@ -89,8 +89,6 @@ public class ImageWaveProgress extends SurfaceView implements SurfaceHolder.Call
     public void surfaceCreated(SurfaceHolder holder) {
         mIsDrawing = true;
         bitmap = setBitmapSize(bitmap, calculateSize * bitmap.getWidth() / bitmap.getHeight(), calculateSize);
-
-
     }
 
     @Override
